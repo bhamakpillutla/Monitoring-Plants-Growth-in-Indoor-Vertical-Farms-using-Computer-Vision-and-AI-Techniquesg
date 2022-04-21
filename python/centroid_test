@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Aug 25 17:10:52 2021
+
+@author: psych256lab
+"""
+import os
+import cv2
+import numpy as np
+import glob
+from google.colab.patches import cv2_imshow
+from PIL import Image
+import regex as re
+from datetime import datetime
+from math import sqrt
+
+import imantics
+from imantics import Polygons, Mask
+import matplotlib.pyplot as plt
+
+
+# Reading files and sorting them in the right order
+
+all_images = [file_name for file_name in glob.glob('/content/*.jpg') ]
+all_images.sort(key=lambda k: k.split(".")[0][-1])
+print(all_images) # 
+
+# Initially, no centroid information is available. 
+previous_centroid_x = -1
+previous_centroid_y = -1
+centroids = []
+areas = []
+dates = []
+index  = 0
+oldImage = ""
+oldDate = ""
+def calc_distance(p1, p2): # simple function, I hope you are more comfortable 
+  return sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2) # Pythagorean theorem
+for i, image_name in enumerate(all_images):
+    imageCentroid = []
+    imageArea = []
+    print("value of i: ",i)
+    rgb_image = cv2.imread(image_name)
+    height, width = rgb_image.shape[:2]
+    gray_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(gray_image, 127, 255, 0)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)  
+    blankImage = np.zeros_like(rgb_image)
+    image_area = np.prod(rgb_image.shape)
+    for i,cnt in enumerate(contours[::-1]):
+        # Refer to https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_imgproc/py_contours/py_contour_features/py_contour_features.html#moments
+        M = cv2.moments(cnt)
+        if M["m00"] != 0:
+          cX = int(M["m10"] / M["m00"])
+          cY = int(M["m01"] / M["m00"])
+        else:
+          cX, cY = 0, 0
+        
+        contour_area = cv2.contourArea(cnt)
+        imageCentroid.append((cX,cY))
+        imageArea.append(contour_area)
+        color = (0, 0, 255)
+        cv2.drawContours(blankImage, [cnt], 0, color, -1) 
+        cv2.circle(blankImage, (cX, cY), 3, (255, 0, 0), -1)
+
+        # contour_area_pc = np.true_divide(int(contour_area),image_area)*100 if int(contour_area) > 1  else 0 
+        # text = ' '.join(['Contour:',str(i),'Area:',str(round(contour_area,2)),'Percentage Area:',str(round(contour_area_pc,2))])
+        # cv2.putText(blankImage,text,(10,60), cv2.FONT_HERSHEY_SIMPLEX, 1,(255),2,cv2.LINE_AA)
+    
+        # plt.imshow(blankImage, cmap = 'gray', interpolation = 'bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+   
+    centroids.append(imageCentroid)
+    areas.append(imageArea)
+    date = re.search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}',image_name)    
+    
+    d = datetime.strptime(date.group(), '%Y-%m-%d %H:%M:%S')
+   
+    cv2.imwrite('/content/results/'+str(d)+".jpg",blankImage)
+    
+
+    #print("..")
+    #cv2_imshow(blankImage)
+    
+    # print(date)
+    # print(images)
+    # print(areas)
+    if len(centroids) == 1:
+      #cv2_imshow(blankImage)
+      img_src = cv2.imread("/content/results/"+ str(d)+".jpg")
+      oldImage  = img_src.copy()
+      oldDate = d
+      
+      #cv2_imshow(oldImage)
+      #oldImage = blankImage
+    if len(centroids)>1:
+      print("..OLD DATE : ",oldDate)
+      cv2_imshow(oldImage)
+      print("..NEW DATE : ",d)
+      cv2_imshow(blankImage)
+      try:
+        print("no of images and ",len(centroids),"index value : ",index)
+        for centroids1,area1 in zip(range(index,len(centroids)),range(index,len(areas))):
+          #print(centroids1,area1)
+          print("centroids:",centroids[centroids1],"\n :areas:",areas[area1])
+         
+          for c1,a1 in zip(centroids[centroids1],areas[area1]):
+            x, y = c1
+            # print("\n FIXED X AND Y: ",x,y)
+    
+            for c2,a2 in zip(centroids[centroids1+1],areas[area1+1]):
+              
+              x_new, y_new = c2
+              # print("\nnew point is: ",x_new,y_new)
+
+              distance = calc_distance((x,y), (x_new,y_new) ) 
+              #difference = distance.euclidean((x,y), (x_new,y_new))
+              #print("\ndistance is : ",distance)
+              if (distance == 0 or distance <=10):
+                print("\n FIXED X AND Y: ",x,y)
+                print("\nnew point is: ",x_new,y_new)
+                print("leaves have same centroid")
+                print("Areas are:",a1,a2)
+                
+                #color = (0, 255, 0) 
+       
+          index = index + 1
+        img_src = cv2.imread("/content/results/"+ str(d)+".jpg")
+        oldImage = img_src.copy()
+        oldDate = d
+      except:
+        pass
+  
+          
+          
+
+
+        
+    
